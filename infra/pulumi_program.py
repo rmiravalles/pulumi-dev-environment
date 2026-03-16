@@ -5,6 +5,13 @@ from pulumi import Config
 config = Config()
 pr = config.require("pr")
 image = config.get("image") or "nginx"
+env_type = config.get("env_type") or "standard"
+
+RESOURCE_PROFILES = {
+    "standard": {"cpu": 0.25, "memory": "0.5Gi"},
+    "large":    {"cpu": 0.5,  "memory": "1.0Gi"},
+}
+resources = RESOURCE_PROFILES.get(env_type, RESOURCE_PROFILES["standard"])
 
 location = "westeurope"
 
@@ -34,8 +41,8 @@ app = azure.app.ContainerApp(
             "name": "demo",
             "image": image,
             "resources": {
-                "cpu": 0.25,
-                "memory": "0.5Gi"
+                "cpu": resources["cpu"],
+                "memory": resources["memory"]
             }
         }]
     }

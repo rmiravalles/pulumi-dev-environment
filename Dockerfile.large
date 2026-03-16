@@ -1,0 +1,7 @@
+# Large environment variant.
+# Replace this with your actual application build.
+# This variant is identical to Dockerfile by default —
+# customise it to produce a heavier/differently-configured image.
+FROM nginx:alpine
+
+COPY . /usr/share/nginx/html

@@ -4,6 +4,122 @@ This repository provisions short-lived Azure preview environments for pull reque
 
 For each pull request, the workflow creates a dedicated Azure Container Apps environment and deploys a simple public container app. The workflow then comments the resulting preview URL back onto the pull request. When the pull request is merged, the corresponding infrastructure is destroyed and the Pulumi stack is removed.
 
+## Developer Guide: Creating a Preview Environment
+
+This section is for developers who want to deploy their application into a preview environment by opening a pull request.
+
+### Prerequisites
+
+You need:
+
+- Write access to this repository (or fork it if your organisation allows that workflow)
+- Docker installed locally if you want to test your image build before pushing
+- Your application source code ready to be containerised
+
+### Step 1 — Clone the repository and create a branch
+
+```bash
+git clone https://github.com/rmiravalles/pulumi-dev-environment
+cd pulumi-dev-environment
+git checkout -b my-feature
+```
+
+### Step 2 — Add your application code
+
+Put your application source files in the repository root alongside the existing `infra/` folder. For example:
+
+```text
+.
+├── src/              ← your application code
+├── package.json      ← or pyproject.toml, go.mod, etc.
+├── Dockerfile        ← your real build definition (see Step 3)
+├── infra/
+└── ...
+```
+
+### Step 3 — Replace the Dockerfile with your real build
+
+Open `Dockerfile` and replace the placeholder content with the build instructions for your application. For example, for a Node.js app:
+
+```dockerfile
+FROM node:22-alpine AS build
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci
+COPY . .
+RUN npm run build
+
+FROM node:22-alpine
+WORKDIR /app
+COPY --from=build /app/dist ./dist
+COPY --from=build /app/node_modules ./node_modules
+EXPOSE 80
+CMD ["node", "dist/index.js"]
+```
+
+> **Important:** your application must listen on port `80`. If it listens on a different port, ask a repository maintainer to update `target_port` in `infra/pulumi_program.py`.
+
+You can verify the image builds correctly locally before pushing:
+
+```bash
+docker build -t my-app:local .
+docker run -p 8080:80 my-app:local
+# visit http://localhost:8080
+```
+
+### Step 4 — Choose an environment size (optional)
+
+Two resource profiles are available. The default is `standard`. If you need more CPU and memory, you will apply the `env:large` label in Step 6.
+
+| Profile | CPU | Memory |
+|---|---|---|
+| `standard` (default) | 0.25 vCPU | 0.5Gi |
+| `large` | 0.5 vCPU | 1.0Gi |
+
+If you want the large profile, also replace `Dockerfile.large` with your build definition (it can be identical to `Dockerfile` or a separately tuned variant).
+
+### Step 5 — Commit and push your branch
+
+```bash
+git add .
+git commit -m "add my application"
+git push origin my-feature
+```
+
+### Step 6 — Open a pull request
+
+Go to the repository on GitHub and open a pull request from your branch against `main`.
+
+- If you want the **standard** environment: open the PR as-is, no label needed.
+- If you want the **large** environment: apply the label **`env:large`** to the PR. You can do this in the Labels panel on the right side of the PR page before or after opening it.
+
+### Step 7 — Wait for the preview URL
+
+Within a few minutes the workflow will:
+
+1. Build your container image from the branch code
+2. Push it to the container registry
+3. Deploy it to Azure Container Apps
+4. Post a comment on the PR with the URL
+
+The comment looks like:
+
+```
+Preview environment is ready: https://app-pr-<number>.<region>.azurecontainerapps.io
+```
+
+### Step 8 — Iterate
+
+Every time you push a new commit to the branch the workflow re-runs automatically and updates the same PR comment with the new deployment URL.
+
+If you change your mind about the environment size, apply or remove the `env:large` label — the workflow re-runs on the `labeled` event and redeploys with the new profile without requiring a push.
+
+### Step 9 — Merge and clean up
+
+When your work is ready, merge the PR. The destroy workflow runs automatically and removes all Azure resources and the Pulumi stack. No manual cleanup is needed.
+
+---
+
 ## What This Repository Does
 
 The repository implements a per-PR preview environment pattern:
@@ -47,6 +163,7 @@ The stack exports a single output named `url`, intended to be the public HTTPS e
 │   ├── Pulumi.yaml
 │   └── pulumi_program.py
 ├── Dockerfile
+├── Dockerfile.large
 ├── requirements.txt
 └── README.md
 ```
@@ -67,8 +184,9 @@ That workflow:
 3. Installs Python dependencies from `requirements.txt`
 4. Installs the Pulumi CLI
 5. Authenticates to Azure using `azure/login`
-6. Logs in to ACR and builds a container image from the branch code, tagged `pr-<number>-<short-sha>`
-7. Runs `python infra/create_env.py <pr-number> --image <image-ref>`
+6. Detects the `env:large` PR label to determine the environment profile
+7. Logs in to ACR and builds the corresponding container image from the branch code, tagged `pr-<number>-<type>-<short-sha>`
+8. Runs `python infra/create_env.py <pr-number> --image <image-ref> --env-type <type>`
 8. Posts or updates a comment on the pull request with the preview URL
 
 ### 2. Stack creation script
@@ -193,13 +311,25 @@ The Azure region is currently hard-coded to:
 
 - `westeurope`
 
+## Environment Types
+
+Two environment profiles are available, selected by applying a label to the pull request before or after opening it.
+
+| Label | Dockerfile | CPU | Memory |
+|---|---|---|---|
+| *(none)* | `Dockerfile` | 0.25 | 0.5Gi |
+| `env:large` | `Dockerfile.large` | 0.5 | 1.0Gi |
+
+If no label is applied the `standard` profile is used. Changing or adding a label on an already-open PR re-triggers the workflow (`labeled` event) and redeploys with the new profile.
+
+To add further profiles, add a new entry to `RESOURCE_PROFILES` in `infra/pulumi_program.py`, add a corresponding `Dockerfile.<type>`, and extend the label detection step in `preview.yaml`.
+
 ## Current Behavior and Assumptions
 
 This repository is intentionally minimal. At the moment it assumes:
 
 - Preview environments are keyed only by PR number
 - Each PR gets its own Pulumi stack
-- The deployed workload is a demo `nginx` container rather than an application image built from this repository
 - The same Azure subscription and credentials are used for create and destroy operations
 - The preview workflow updates a single PR comment instead of creating a new one on every deployment
 
