@@ -12,9 +12,9 @@ This section is for developers who want to deploy their application into a previ
 
 You need:
 
-- Write access to this repository (or fork it if your organisation allows that workflow)
+- Write access to this repository (or fork it if your organization allows that workflow)
 - Docker installed locally if you want to test your image build before pushing
-- Your application source code ready to be containerised
+- Your application source code ready to be containerized
 
 ### Step 1 — Clone the repository and create a branch
 
