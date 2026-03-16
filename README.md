@@ -46,6 +46,7 @@ The stack exports a single output named `url`, intended to be the public HTTPS e
 │   ├── destroy_env.py
 │   ├── Pulumi.yaml
 │   └── pulumi_program.py
+├── Dockerfile
 ├── requirements.txt
 └── README.md
 ```
@@ -66,8 +67,9 @@ That workflow:
 3. Installs Python dependencies from `requirements.txt`
 4. Installs the Pulumi CLI
 5. Authenticates to Azure using `azure/login`
-6. Runs `python infra/create_env.py <pr-number>`
-7. Posts or updates a comment on the pull request with the preview URL
+6. Logs in to ACR and builds a container image from the branch code, tagged `pr-<number>-<short-sha>`
+7. Runs `python infra/create_env.py <pr-number> --image <image-ref>`
+8. Posts or updates a comment on the pull request with the preview URL
 
 ### 2. Stack creation script
 
@@ -75,7 +77,7 @@ That workflow:
 
 1. Create or select a stack named `pr-<pr-number>`
 2. Install the `azure-native` Pulumi plugin at version `v2.0.0`
-3. Set the Pulumi config key `pr`
+3. Set the Pulumi config keys `pr` and `image`
 4. Run `pulumi up`
 5. Print the exported preview URL
 6. Expose that URL as a GitHub Actions step output when running in CI
@@ -175,6 +177,7 @@ For the Azure Blob backend used by this repository, configure these additional G
 - `PULUMI_BACKEND_URL` (for example: `azblob://pulumi-state`)
 - `AZURE_STORAGE_ACCOUNT`
 - `AZURE_STORAGE_KEY`
+- `AZURE_CONTAINER_REGISTRY` — the ACR name (without `.azurecr.io`), used to build and push the container image
 
 The workflows run `pulumi login` against `PULUMI_BACKEND_URL` before create and destroy operations.
 

@@ -14,6 +14,7 @@ def parse_args() -> argparse.Namespace:
         description="Create or update an Azure preview environment for a pull request."
     )
     parser.add_argument("pr_number", type=int, help="Pull request number")
+    parser.add_argument("--image", default="nginx", help="Container image reference to deploy")
     return parser.parse_args()
 
 
@@ -26,7 +27,7 @@ def write_github_output(name: str, value: str) -> None:
         file.write(f"{name}={value}\n")
 
 
-def create_stack(pr_number: str) -> None:
+def create_stack(pr_number: str, image: str) -> None:
     stack_name = f"pr-{pr_number}"
     stack = auto.create_or_select_stack(
         stack_name=stack_name,
@@ -38,6 +39,7 @@ def create_stack(pr_number: str) -> None:
 
     print("Setting config...")
     stack.set_config("pr", auto.ConfigValue(value=pr_number))
+    stack.set_config("image", auto.ConfigValue(value=image))
 
     print("Deploying stack...")
     result = stack.up(on_output=print)
@@ -55,7 +57,7 @@ def main() -> int:
     args = parse_args()
 
     try:
-        create_stack(str(args.pr_number))
+        create_stack(str(args.pr_number), args.image)
     except Exception as exc:
         print(f"Failed to create preview environment: {exc}", file=sys.stderr)
         return 1

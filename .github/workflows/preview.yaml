@@ -32,6 +32,21 @@ jobs:
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
+      - name: Log in to Azure Container Registry
+        run: az acr login --name ${{ secrets.AZURE_CONTAINER_REGISTRY }}
+
+      - name: Build and push container image
+        id: build_image
+        env:
+          ACR: ${{ secrets.AZURE_CONTAINER_REGISTRY }}
+          PR: ${{ github.event.pull_request.number }}
+          SHA: ${{ github.sha }}
+        run: |
+          IMAGE="${ACR}.azurecr.io/preview:pr-${PR}-${SHA::7}"
+          docker build -t "$IMAGE" .
+          docker push "$IMAGE"
+          echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
+
       - name: Login to Pulumi backend (Azure Blob)
         env:
           AZURE_STORAGE_ACCOUNT: ${{ secrets[format('AZURE_STORAGE_{0}', 'ACCOUNT')] }}
@@ -42,7 +57,8 @@ jobs:
         id: create_preview
         run: |
           python infra/create_env.py \
-            ${{ github.event.pull_request.number }}
+            ${{ github.event.pull_request.number }} \
+            --image ${{ steps.build_image.outputs.image }}
 
       - name: Comment preview URL
         if: ${{ success() && steps.create_preview.outputs.preview_url != '' }}

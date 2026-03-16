@@ -4,6 +4,7 @@ from pulumi import Config
 
 config = Config()
 pr = config.require("pr")
+image = config.get("image") or "nginx"
 
 location = "westeurope"
 
@@ -31,7 +32,7 @@ app = azure.app.ContainerApp(
     template={
         "containers": [{
             "name": "demo",
-            "image": "nginx",
+            "image": image,
             "resources": {
                 "cpu": 0.25,
                 "memory": "0.5Gi"
