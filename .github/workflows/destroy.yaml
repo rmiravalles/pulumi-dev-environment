@@ -1,0 +1,44 @@
+name: Destroy Preview Environment
+
+on:
+  pull_request:
+    types: [closed]
+
+permissions:
+  contents: read
+
+jobs:
+  destroy:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: 3.12
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Install Pulumi CLI
+        uses: pulumi/actions@v6
+        with:
+          command: version
+
+      - name: Login to Azure
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Login to Pulumi backend (Azure Blob)
+        env:
+          AZURE_STORAGE_ACCOUNT: ${{ secrets[format('AZURE_STORAGE_{0}', 'ACCOUNT')] }}
+          AZURE_STORAGE_KEY: ${{ secrets[format('AZURE_STORAGE_{0}', 'KEY')] }}
+        run: pulumi login ${{ secrets[format('PULUMI_{0}_{1}', 'BACKEND', 'URL')] }}
+
+      - name: Destroy preview environment
+        run: |
+          python infra/destroy_env.py \
+            ${{ github.event.pull_request.number }}

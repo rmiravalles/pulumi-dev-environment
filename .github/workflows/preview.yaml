@@ -1,0 +1,87 @@
+name: Preview Environment
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: 3.12
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Install Pulumi CLI
+        uses: pulumi/actions@v6
+        with:
+          command: version
+
+      - name: Login to Azure
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Login to Pulumi backend (Azure Blob)
+        env:
+          AZURE_STORAGE_ACCOUNT: ${{ secrets[format('AZURE_STORAGE_{0}', 'ACCOUNT')] }}
+          AZURE_STORAGE_KEY: ${{ secrets[format('AZURE_STORAGE_{0}', 'KEY')] }}
+        run: pulumi login ${{ secrets[format('PULUMI_{0}_{1}', 'BACKEND', 'URL')] }}
+
+      - name: Create preview environment
+        id: create_preview
+        run: |
+          python infra/create_env.py \
+            ${{ github.event.pull_request.number }}
+
+      - name: Comment preview URL
+        if: ${{ success() && steps.create_preview.outputs.preview_url != '' }}
+        uses: actions/github-script@v8
+        env:
+          PREVIEW_URL: ${{ steps.create_preview.outputs.preview_url }}
+        with:
+          script: |
+            const marker = '<!-- preview-environment-url -->';
+            const body = [
+              marker,
+              `Preview environment is ready: ${process.env.PREVIEW_URL}`,
+            ].join('\n');
+
+            const { owner, repo } = context.repo;
+            const issue_number = context.issue.number;
+
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner,
+              repo,
+              issue_number,
+              per_page: 100,
+            });
+
+            const existing = comments.find((comment) => comment.body.includes(marker));
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner,
+                repo,
+                comment_id: existing.id,
+                body,
+              });
+              return;
+            }
+
+            await github.rest.issues.createComment({
+              owner,
+              repo,
+              issue_number,
+              body,
+            });

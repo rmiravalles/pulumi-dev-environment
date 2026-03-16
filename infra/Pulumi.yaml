@@ -1,0 +1,5 @@
+name: preview
+runtime:
+  name: python
+description: Pulumi project for ephemeral pull request preview environments.
+main: .
