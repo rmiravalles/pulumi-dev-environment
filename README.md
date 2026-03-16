@@ -1,4 +1,4 @@
-# pulumi-dev-environment
+# Test environment provisioning with Pulumi Automation API and GitHub Actions
 
 This repository provisions short-lived Azure preview environments for pull requests by using Pulumi Automation API from Python and GitHub Actions.
 
